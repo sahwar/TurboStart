@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# TurboStart 1.0
+# TurboStart 1.1
 # Copyright (C) 2014-2015 Naveen Kumarasinghe <dndkumarasinghe@gmail.com>
 # License: http://www.gnu.org/licenses/gpl.html
 
@@ -9,6 +9,39 @@ import sys
 import os
 import tarfile
 import shutil
+from gi.repository import Gtk
+import threading
+
+
+class Splash(Gtk.Window):
+	
+	def __init__(self, app_name):
+		Gtk.Window.__init__(self, title=app_name.title())
+		self.set_default_size(400,130)
+		self.connect('delete-event', Gtk.main_quit)
+		self.set_position(Gtk.WindowPosition.CENTER)
+		self.spinner = Gtk.Spinner()
+
+		self.label = Gtk.Label("Saving state...")
+		self.label.set_alignment(xalign=0.5, yalign=1)
+
+		self.layout = Gtk.VBox()
+		self.layout.pack_start(self.label,0,1,10)
+		self.layout.pack_start(self.spinner,1,1,10)
+
+		self.add(self.layout)
+		#self.set_opacity(0.5)
+
+	def start_splash(self):
+		self.spinner.start()
+		self.show_all()
+		Gtk.main()
+
+	def stop_splash(self):
+		self.spinner.stop
+		self.hide()
+		Gtk.main_quit()
+
 
 # creating cache directory
 if not os.path.exists("/opt/TurboStart"):
@@ -36,6 +69,18 @@ args = []
 for i in range(5,argc):
 	args.append(sys.argv[i])
 
+
+# making ram_dir if does not exist 
+if not os.path.exists(ram_dir):
+	os.makedirs(ram_dir)
+
+
+# if the program is already in memory, open it.
+if os.path.exists(ram_dir + app_dir):
+	subprocess.call(['su' , user , '-c',  '{}'.format(ram_dir + app_dir + "/" + exe_file + ' ' + ' '.join(args))])
+	sys.exit()
+
+
 # mounting configuration cache
 if not (config_dir == ""):
 
@@ -49,7 +94,10 @@ if not (config_dir == ""):
       		tar.extractall(ram_dir)
 
 	# disable configurations on the disk
-	os.rename(config_dir, config_dir + "_")
+	try:
+		os.rename(config_dir, config_dir + "_")
+	except:
+		os.unlink(config_dir)
 
 	# enable configurations on ram
 	os.symlink(ram_dir + config_dir, config_dir)
@@ -61,11 +109,6 @@ if not (os.path.isfile(app_cache_file)):
 		tar.add(app_dir)
 
 
-# making ram_dir if does not exist 
-if not os.path.exists(ram_dir):
-	os.makedirs(ram_dir)
-
-
 # extract program cache to ram
 with tarfile.open(app_cache_file) as tar:
         tar.extractall(ram_dir)
@@ -75,8 +118,14 @@ with tarfile.open(app_cache_file) as tar:
 subprocess.call(['su' , user , '-c',  '{}'.format(ram_dir + app_dir + "/" + exe_file + ' ' + ' '.join(args))])
 
 
+# Showing the splash screen
+splash = Splash(app_name)
+thread1 = threading.Thread(target=splash.start_splash)
+thread1.start()
+
+
 # freeing ram
-shutil.rmtree(ram_dir + "/" + app_dir)
+shutil.rmtree(ram_dir + app_dir)
 
 
 # unmounting configuration cache
@@ -96,4 +145,7 @@ if not (config_dir == ""):
 
 	# freeing configuration memory
 	shutil.rmtree(ram_dir + config_dir)
+
+# hide splash
+splash.stop_splash()
 	
